@@ -16,6 +16,8 @@ import { BullMQJobQueuePlugin } from '@vendure/job-queue-plugin/package/bullmq';
 import path from 'path';
 import { ConnectionOptions } from 'typeorm';
 
+import { SchemaDirectivePlugin } from './test-plugins/schema-directive-plugin';
+
 /**
  * Config settings used during development
  */
@@ -55,23 +57,13 @@ export const devConfig: VendureConfig = {
     paymentOptions: {
         paymentMethodHandlers: [dummyPaymentHandler],
     },
-    customFields: {
-        // Country: [
-        //     { name: 'foo', type: 'localeString' },
-        //     { name: 'rating', type: 'int' },
-        // ],
-        // CustomerGroup: [{ name: 'foo', type: 'string' }],
-        // PaymentMethod: [{ name: 'foo', type: 'string' }],
-        // Promotion: [{ name: 'foo', type: 'string' }],
-        // TaxCategory: [{ name: 'foo', type: 'string' }],
-        // TaxRate: [{ name: 'foo', type: 'string' }],
-        // Zone: [{ name: 'foo', type: 'string' }],
-    },
+    customFields: {},
     logger: new DefaultLogger({ level: LogLevel.Debug }),
     importExportOptions: {
         importAssetsDir: path.join(__dirname, 'import-assets'),
     },
     plugins: [
+        SchemaDirectivePlugin,
         AssetServerPlugin.init({
             route: 'assets',
             assetUploadDir: path.join(__dirname, 'assets'),

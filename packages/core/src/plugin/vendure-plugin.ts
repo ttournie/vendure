@@ -72,6 +72,7 @@ export interface APIExtensionDefinition {
      * classes, i.e. using the Nest `\@Resolver()` decorator etc.
      */
     resolvers: Array<Type<any>> | (() => Array<Type<any>>);
+    schemaDirectives?: Record<string, any> | (() => Record<string, any>);
 }
 
 /**

@@ -71,7 +71,7 @@ export function graphQLResolversFor(
         : [];
 }
 
-function reflectMetadata(metatype: Type<any> | DynamicModule, metadataKey: string) {
+export function reflectMetadata(metatype: Type<any> | DynamicModule, metadataKey: string) {
     if (isDynamicModule(metatype)) {
         return Reflect.getMetadata(metadataKey, metatype.module);
     } else {

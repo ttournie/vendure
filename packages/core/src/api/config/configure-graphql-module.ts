@@ -1,5 +1,4 @@
 import { DynamicModule } from '@nestjs/common';
-import { ModuleRef } from '@nestjs/core';
 import { GqlModuleOptions, GraphQLModule, GraphQLTypesLoader } from '@nestjs/graphql';
 import { notNullOrUndefined } from '@vendure/common/lib/shared-utils';
 import { buildSchema, extendSchema, GraphQLSchema, printSchema, ValidationContext } from 'graphql';
@@ -7,14 +6,17 @@ import path from 'path';
 
 import { ConfigModule } from '../../config/config.module';
 import { ConfigService } from '../../config/config.service';
-import { TransactionalConnection } from '../../connection/transactional-connection';
 import { I18nModule } from '../../i18n/i18n.module';
 import { I18nService } from '../../i18n/i18n.service';
 import { getDynamicGraphQlModulesForPlugins } from '../../plugin/dynamic-plugin-api.module';
-import { getPluginAPIExtensions } from '../../plugin/plugin-metadata';
-import { CustomFieldRelationService } from '../../service/helpers/custom-field-relation/custom-field-relation.service';
+import {
+    getPluginAPIExtensions,
+    isDynamicModule,
+    PLUGIN_METADATA,
+    reflectMetadata,
+} from '../../plugin/plugin-metadata';
+import { APIExtensionDefinition } from '../../plugin/vendure-plugin';
 import { ServiceModule } from '../../service/service.module';
-import { ProductVariantService } from '../../service/services/product-variant.service';
 import { ApiSharedModule } from '../api-internal-modules';
 import { CustomFieldRelationResolverService } from '../common/custom-field-relation-resolver.service';
 import { IdCodecService } from '../common/id-codec.service';
@@ -96,12 +98,14 @@ async function createGraphQLOptions(
         options.apiType,
         builtSchema,
     );
+    const schemaDirectives = getSchemaDirectives(options.apiType);
     return {
         path: '/' + options.apiPath,
         typeDefs: printSchema(builtSchema),
         include: [options.resolverModule, ...getDynamicGraphQlModulesForPlugins(options.apiType)],
         fieldResolverEnhancers: ['guards'],
         resolvers,
+        schemaDirectives,
         // We no longer rely on the upload facility bundled with Apollo Server, and instead
         // manually configure the graphql-upload package. See https://github.com/vendure-ecommerce/vendure/issues/396
         uploads: false,
@@ -157,5 +161,38 @@ async function createGraphQLOptions(
         schema = generatePermissionEnum(schema, configService.authOptions.customPermissions);
 
         return schema;
+    }
+
+    function getSchemaDirectives(apiType: 'shop' | 'admin'): Record<string, any> {
+        const schemaDirectivesMap = new Map<string, { pluginName: string; directive: any }>();
+
+        for (const plugin of configService.plugins) {
+            const apiExtensions: APIExtensionDefinition | undefined =
+                apiType === 'shop'
+                    ? reflectMetadata(plugin, PLUGIN_METADATA.SHOP_API_EXTENSIONS)
+                    : reflectMetadata(plugin, PLUGIN_METADATA.ADMIN_API_EXTENSIONS);
+            if (apiExtensions?.schemaDirectives) {
+                const directivesForPlugin: Record<string, any> =
+                    typeof apiExtensions.schemaDirectives === 'function'
+                        ? apiExtensions.schemaDirectives()
+                        : apiExtensions.schemaDirectives;
+                const pluginName = isDynamicModule(plugin) ? plugin.module.name : plugin.name;
+                for (const [name, directive] of Object.entries(directivesForPlugin)) {
+                    const conflicting = schemaDirectivesMap.get(name);
+                    if (conflicting) {
+                        throw new Error(
+                            `Conflicting schemaDirective "${name}", defined in ${conflicting.pluginName} and ${pluginName}`,
+                        );
+                    }
+                    schemaDirectivesMap.set(name, { pluginName, directive });
+                }
+            }
+        }
+        return Array.from(schemaDirectivesMap.entries()).reduce((directives, [name, { directive }]) => {
+            return {
+                ...directives,
+                [name]: directive,
+            };
+        }, {} as Record<string, any>);
     }
 }
